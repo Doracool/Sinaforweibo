@@ -13,6 +13,10 @@
 #import "statusCell.h"
 #import "NSString+StringSize.h"
 #import "UINavigationController+notifation.h"
+#import "StatusFooterView.h"
+#import "StatusModel.h"
+#import "UserModel.h"
+
 @interface HomeVC ()
 @property (nonatomic, strong) NSArray *statusData;
 @property (nonatomic) BOOL refreing;//正在加载中
@@ -44,7 +48,19 @@
     
     AFHTTPSessionManager *manager = [AFHTTPSessionManager manager];
     [manager GET:url parameters:params progress:nil success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
-        self.statusData = responseObject[@"statuses"];
+        
+        //从服务器获取的数据
+        NSArray *result = responseObject[@"statuses"];
+        //将json数据转化为model
+        NSMutableArray *modelArray = [NSMutableArray array];
+        
+        [result enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+            StatusModel *model = [[StatusModel alloc] initWithDictionary:obj];
+            [modelArray addObject:model];
+        }];
+        
+        //用模型作为数据源
+        self.statusData = modelArray;
         [self.tableView reloadData];
     } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
         NSLog(@"error---%@",error);
@@ -59,6 +75,8 @@
     
     [self setrefreshcontrolTitle:@"下拉加载更多"];
  
+    //tableView注册footerView的xib文件
+    [self.tableView registerNib:[UINib nibWithNibName:@"StatusFootView" bundle:nil] forHeaderFooterViewReuseIdentifier:@"StatusFootView"];
     
     // Uncomment the following line to preserve selection between presentations.
     // self.clearsSelectionOnViewWillAppear = NO;
@@ -76,18 +94,34 @@
     NSString *url = [kBaseURL stringByAppendingString:@"/statuses/home_timeline.json"];
     
     NSMutableDictionary *params = [[Account shareAccount] requestParams];
-    [params setObject:self.statusData.firstObject[@"id"] forKey:@"since_id"];
+    [params setObject:[self.statusData.firstObject statusID] forKey:@"since_id"];
     
     AFHTTPSessionManager *manager = [AFHTTPSessionManager manager];
     [manager GET:url parameters:params progress:nil success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
         //将新的数据放在数组的最前边
-        NSMutableArray *array = [NSMutableArray arrayWithArray:responseObject[@"statuses"]];
-        [array addObjectsFromArray:self.statusData];
+        NSArray *result = [responseObject objectForKey:@"statuses"];
         
-        self.statusData = array;
+        NSMutableArray *modelArray = [NSMutableArray array];
         
-        //首先更新数据，然后更新UI
+        [result enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+            StatusModel *model = [[StatusModel alloc] initWithDictionary:obj];
+            
+            [modelArray addObject:model];
+        
+        }];
+        
+        //追加上以前的数据构成最新的数据
+        [modelArray addObjectsFromArray:self.statusData];
+        self.statusData = modelArray;
         [self.tableView reloadData];
+        
+//        NSMutableArray *array = [NSMutableArray arrayWithArray:responseObject[@"statuses"]];
+//        [array addObjectsFromArray:self.statusData];
+//        
+//        self.statusData = array;
+//        
+//        //首先更新数据，然后更新UI
+//        [self.tableView reloadData];
         
         [self.refreshControl endRefreshing];
         [self setrefreshcontrolTitle:@"下拉加载更多"];
@@ -119,7 +153,7 @@
         return;
     }
     
-    [params setObject:self.statusData.lastObject[@"id"] forKey:@"max_id"];
+    [params setObject:[self.statusData.lastObject statusID] forKey:@"max_id"];
     
     AFHTTPSessionManager *session = [AFHTTPSessionManager manager];
     
@@ -130,8 +164,18 @@
     self.refreing = YES;
     [session GET:url parameters:params progress:nil success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
         NSArray *statuses = responseObject[@"statuses"];
+        
+        NSMutableArray *modelArray = [NSMutableArray array];
+        
+        [statuses enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+            StatusModel *model = [[StatusModel alloc] initWithDictionary:obj];
+            
+            [modelArray addObject:model];
+        }];
+        
+        //追加上新的数据构成新的数据源
         NSMutableArray *array = [NSMutableArray arrayWithArray:self.statusData];
-        [array addObjectsFromArray:statuses];
+        [array addObjectsFromArray:modelArray];
         self.statusData = array;
         [self.tableView reloadData];
         
@@ -145,32 +189,52 @@
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
 //#warning Incomplete implementation, return the number of sections
-    return 1;
+    return self.statusData.count;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
 //#warning Incomplete implementation, return the number of rows
-    return self.statusData.count;
+    return 1;
 }
+
 
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     statusCell *cell = [tableView dequeueReusableCellWithIdentifier:@"statusCell" forIndexPath:indexPath];
     
     //绑定数据
-    [cell bandingStatus:self.statusData[indexPath.row]];
+    [cell bandingStatus:self.statusData[indexPath.section]];
 //     _titleH = cell.content.frame.size.height;
     return cell;
 }
 
 -(void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)indexPath
 {
-    if (self.statusData.count - 1 - indexPath.row == 3) {
+    if (self.statusData.count - 1 - indexPath.section == 3) {
         //倒数第三条
         [self loadMore];
     }
 }
 
+-(CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section
+{
+    if (section == 0) {
+        return 0.1f;
+    }
+    return 10.f;
+}
+
+-(CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section
+{
+    return 20.f;
+}
+
+-(UIView *)tableView:(UITableView *)tableView viewForFooterInSection:(NSInteger)section
+{
+    StatusFooterView *footer = [tableView dequeueReusableHeaderFooterViewWithIdentifier:@"StatusFootView"];
+    [footer bandingStatus:self.statusData[section]];
+    return footer;
+}
 -(CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath
 {
 #if 0
@@ -183,7 +247,7 @@
      
 #else
     statusCell *cell = [tableView dequeueReusableCellWithIdentifier:@"statusCell"];
-    [cell bandingStatus:self.statusData[indexPath.row]];
+    [cell bandingStatus:self.statusData[indexPath.section]];
     
     return [cell.contentView systemLayoutSizeFittingSize:UILayoutFittingCompressedSize].height + 1;
 #endif

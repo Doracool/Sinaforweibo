@@ -7,7 +7,7 @@
 //
 
 #import <UIKit/UIKit.h>
-
+@class StatusModel;
 @interface statusCell : UITableViewCell
 @property (weak, nonatomic) IBOutlet UIImageView *icon;
 @property (weak, nonatomic) IBOutlet UILabel *name;
@@ -21,5 +21,5 @@
 @property (weak, nonatomic) IBOutlet UILabel *content;
 //@property (nonatomic, assign) NSInteger titleHeight;
 
--(void)bandingStatus:(NSDictionary *)info;
+-(void)bandingStatus:(StatusModel *)info;
 @end
