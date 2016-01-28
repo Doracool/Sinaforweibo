@@ -16,7 +16,7 @@
 #import "StatusFooterView.h"
 #import "StatusModel.h"
 #import "UserModel.h"
-
+#import "DataBaseEngine.h"
 @interface HomeVC ()
 @property (nonatomic, strong) NSArray *statusData;
 @property (nonatomic) BOOL refreing;//正在加载中
@@ -62,6 +62,9 @@
         //用模型作为数据源
         self.statusData = modelArray;
         [self.tableView reloadData];
+        
+        //缓存到数据库
+        [DataBaseEngine saveStatuses:result];
     } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
         NSLog(@"error---%@",error);
     }];
@@ -78,6 +81,8 @@
     //tableView注册footerView的xib文件
     [self.tableView registerNib:[UINib nibWithNibName:@"StatusFootView" bundle:nil] forHeaderFooterViewReuseIdentifier:@"StatusFootView"];
     
+    //从数据库中查询数据
+    self.statusData = [DataBaseEngine selectedStatuses];
     // Uncomment the following line to preserve selection between presentations.
     // self.clearsSelectionOnViewWillAppear = NO;
     
